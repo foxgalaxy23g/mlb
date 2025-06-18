@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# Проверка на запуск от имени root
 if [ "$EUID" -ne 0 ]; then
   echo "Meetlook Linux Builder должен быть запущен с правами root. Используйте sudo" >&2
   exit 1
@@ -41,7 +42,12 @@ EXTRACT="$WORKDIR/extract"
 FS="$WORKDIR/filesystem"
 FINAL_ISO="$WORKDIR/custom-live.iso"
 
+# <<< НОВОЕ: Определяем пути для общей папки
+SHARE_DIR="$WORKDIR/share"
+CHROOT_SHARE_PATH="$FS/mnt/share"
+
 COMMANDS_FILE="$PWD/commands.txt"
+
 
 # === 1. Компиляция Live OS ===
 echo "🛠️ 1. Сборка live-build дистрибутива..."
@@ -71,6 +77,8 @@ cd "$PWD"
 # === 2. Распаковка ISO и подготовка chroot ===
 echo "🗃️ 2. Создание рабочих директорий..."
 mkdir -p "$EXTRACT" "$FS"
+# <<< НОВОЕ: Создаем общую папку на хосте
+mkdir -p "$SHARE_DIR" 
 
 echo "📦 3. Монтирование и копирование ISO..."
 sudo mount -o loop "$OUTPUT_ISO" /mnt
@@ -80,11 +88,16 @@ sudo umount /mnt
 echo "📤 4. Распаковка squashfs..."
 sudo unsquashfs -d "$FS" "$EXTRACT/live/filesystem.squashfs"
 
+# <<< НОВОЕ: Создаем точку монтирования внутри будущей chroot-системы
+sudo mkdir -p "$CHROOT_SHARE_PATH"
+
 echo "🔧 5. Подготовка chroot окружения..."
 sudo mount --bind /dev  "$FS/dev"
 sudo mount --bind /dev/pts "$FS/dev/pts"
 sudo mount -t sysfs sys "$FS/sys"
 sudo mount -t proc proc "$FS/proc"
+# <<< НОВОЕ: Монтируем нашу общую папку
+sudo mount --bind "$SHARE_DIR" "$CHROOT_SHARE_PATH"
 sudo cp /etc/resolv.conf "$FS/etc/resolv.conf"
 
 # === 6. Выполнение команд из commands.txt ===
@@ -98,11 +111,15 @@ else
 fi
 
 # === 7. Ручной chroot ===
+# <<< НОВОЕ: Инструкция для пользователя
 echo "🚪 7. Вход в chroot. Выйдите через 'exit' когда закончите."
+echo "ℹ️  Общая папка доступна: файлы из '$SHARE_DIR' на вашем компьютере находятся в '/mnt/share' внутри chroot."
 sudo chroot "$FS" /bin/bash
 
 # === 8. Очистка окружения ===
 echo "🧹 8. Очистка chroot окружения..."
+# <<< НОВОЕ: Размонтируем общую папку
+sudo umount "$CHROOT_SHARE_PATH"
 sudo umount "$FS/dev/pts"
 sudo umount "$FS/dev"
 sudo umount "$FS/proc"
@@ -138,4 +155,4 @@ sudo xorriso -as mkisofs \
 cd "$PWD"
 
 echo "✅ Готово! Новый ISO: $FINAL_ISO"
-
+echo "ℹ️  Не забудьте проверить папку '$SHARE_DIR' на наличие временных файлов."
