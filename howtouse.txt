@@ -1,0 +1,3 @@
+Чтобы запустить Meetlook Builder вам надо сделать пару шагов
+напишите sudo chmod +x mlb.sh
+запустите sudo ./mlb.sh
