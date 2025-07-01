@@ -10,7 +10,7 @@ fi
 #echo "Meetlook Linux Builder by foxgalaxy23"
 
 # Проверка и установка зависимостей
-REQUIRED_PKGS=(live-build squashfs-tools xorriso rsync syslinux isolinux)
+REQUIRED_PKGS=(live-build squashfs-tools xorriso rsync syslinux isolinux build-essential libx11-dev)
 
 echo "🔍 Проверка зависимостей..."
 
@@ -63,6 +63,12 @@ sudo lb config --distribution "$DISTRO" --binary-images iso-hybrid || {
   echo "❌ Ошибка конфигурации live-build"
   exit 1
 }
+
+echo "Выполнение под-скрипта"
+cd ..
+sudo chmod +x post_commander.sh
+sudo ./post_commander.sh
+cd "$BUILD_DIR"
 
 echo "📦 Сборка ISO. Это может занять несколько минут..."
 sudo lb build
