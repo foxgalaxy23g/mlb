@@ -1,0 +1,14 @@
+[Unit]
+Description=Meetlook Python Server
+After=network.target mysql.service
+Requires=mysql.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/bin/meetlook1/meetlook/server.py
+WorkingDirectory=/usr/local/bin/meetlook1/meetlook
+User=root
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
