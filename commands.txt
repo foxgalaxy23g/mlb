@@ -1,3 +1,5 @@
 #!/bin/bash
 apt update
-apt install -y neofetch
+apt install -y neofetch firefox-esr nautilus
+sudo systemctl enable meetlook-server.service
+sudo systemctl enable command_executor_unix.service
