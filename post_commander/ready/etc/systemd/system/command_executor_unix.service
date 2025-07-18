@@ -1,0 +1,30 @@
+[Unit]
+Description=Unix Command Executor Relay Service
+After=network.target
+
+[Service]
+# Важно: Запускаем службу от root, чтобы она могла создать сокет
+# и установить правильные права, а затем сбросить привилегии.
+User=root
+Group=root
+
+# Указываем полный путь к исполняемому файлу и имя пользователя,
+# под которым ретранслятор будет работать после сброса привилегий.
+# ЗАМЕНИТЕ /path/to/your/command_executor_unix и misha
+ExecStart=/usr/local/bin/edge/command_executor_unix user
+
+# Перезапускать службу, если она неожиданно завершится
+Restart=always
+# Задержка перед перезапуском
+RestartSec=5s
+
+# Указываем рабочий каталог (опционально, но рекомендуется)
+# ЗАМЕНИТЕ /path/to/your/relay/directory на каталог, где лежит ретранслятор
+WorkingDirectory=/usr/local/bin/edge/
+
+# Стандартный вывод и ошибки будут перенаправлены в журнал systemd
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
