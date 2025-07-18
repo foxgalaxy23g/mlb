@@ -1,536 +1,233 @@
 <?php
-// 1. Настройки подключения к базе данных MySQL
-$db_host = 'localhost';      // Хост вашей БД (обычно 'localhost')
-$db_user = 'root'; // Имя пользователя БД
-$db_pass = '';   // Пароль пользователя БД
-$db_name = 'edge'; // Название вашей БД
+// index.php - Единый файл для списка пользователей и аутентификации
 
-// Попытка подключения к БД
-$conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
+session_start(); // Начинаем сессию для управления состоянием
 
-$applications_data = [];
-$db_connection_error = null;
+include "assets/components/db.php";
 
-// Проверка соединения
-if ($conn->connect_error) {
-    $db_connection_error = "Ошибка подключения: " . $conn->connect_error;
-} else {
-    // Установка кодировки UTF-8 для правильного отображения русских имен
-    $conn->set_charset("utf8");
+// --- ОБРАБОТКА AJAX-ЗАПРОСОВ (ПРОВЕРКА ПАРОЛЯ) ---
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+    header('Content-Type: application/json');
 
-    $sql = "SELECT name, path, icon FROM applications ORDER BY name ASC";
-    $result = $conn->query($sql);
+    $response = ['success' => false, 'message' => 'Неизвестная ошибка.'];
 
-    if ($result) {
-        while ($row = $result->fetch_assoc()) {
-            $applications_data[] = $row;
+    if (isset($_POST['username']) && isset($_POST['password'])) {
+        $username = $_POST['username'];
+        $password = $_POST['password'];
+
+        // Ищем пользователя в базе данных, теперь запрашиваем и аватарку
+        $stmt = $pdo->prepare("SELECT id, username, password, avatar FROM users WHERE username = :username");
+        $stmt->execute(['username' => $username]);
+        $user = $stmt->fetch();
+
+        if ($user) {
+            // Проверяем, пустой ли пароль у пользователя в базе данных
+            if (empty($user['password'])) {
+                // Если пароль пустой, авторизуем без ввода пароля
+                $_SESSION['user_id'] = $user['id'];
+                $_SESSION['username'] = $user['username'];
+                $_SESSION['avatar'] = $user['avatar']; // Сохраняем путь к аватарке
+                $response['success'] = true;
+                $response['redirect'] = 'dash.php';
+            } elseif (password_verify($password, $user['password'])) {
+                // Если пароль не пустой, проверяем его
+                $_SESSION['user_id'] = $user['id'];
+                $_SESSION['username'] = $user['username'];
+                $_SESSION['avatar'] = $user['avatar']; // Сохраняем путь к аватарке
+                $response['success'] = true;
+                $response['redirect'] = 'dash.php';
+            } else {
+                $response['message'] = "Неверный пароль.";
+            }
+        } else {
+            $response['message'] = "Пользователь не найден.";
         }
-        $result->free();
     } else {
-        $db_connection_error = "Ошибка выполнения запроса: " . $conn->error;
+        $response['message'] = "Отсутствуют имя пользователя или пароль.";
     }
-    $conn->close();
+
+    echo json_encode($response);
+    exit();
 }
 
-// Конвертируем данные приложений в JSON для JavaScript
-$apps_json = json_encode($applications_data);
-$db_error_json = json_encode($db_connection_error); // Также передаем ошибку, если она есть
+// --- ПРОВЕРКА АВТОРИЗАЦИИ ДЛЯ ОТОБРАЖЕНИЯ КОНТЕНТА ---
+$is_logged_in = isset($_SESSION['user_id']);
+$current_username = $is_logged_in ? htmlspecialchars($_SESSION['username']) : '';
+$current_avatar = $is_logged_in && !empty($_SESSION['avatar']) ? htmlspecialchars($_SESSION['avatar']) : 'default_avatar.png'; // Указываем дефолтную аватарку
+
+// --- ПОЛУЧЕНИЕ СПИСКА ПОЛЬЗОВАТЕЛЕЙ ДЛЯ ОТОБРАЖЕНИЯ (если пользователь не залогинен) ---
+$users = [];
+if (!$is_logged_in) {
+    try {
+        // Теперь получаем username, password (для проверки, пустой ли он), и avatar
+        $stmt = $pdo->query("SELECT id, username, password, avatar FROM users ORDER BY username ASC");
+        $users = $stmt->fetchAll();
+    } catch (\PDOException $e) {
+        die("Ошибка при получении списка пользователей: " . $e->getMessage());
+    }
+}
+
+// --- HTML-СТРУКТУРА С ФОРМОЙ И СПИСКОМ ПОЛЬЗОВАТЕЛЕЙ ---
 ?>
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>PHP Launcher</title>
-    <style>
-html, body {
-     margin: 0;
-     padding: 0;
-     height: 100%;
-     overflow: hidden;
-     font-family: sans-serif;
-}
-body {
-     background: url('https://wallpaperaccess.com/full/317501.jpg') center/cover no-repeat;
-}
-.window {
-     position: absolute;
-     width: 400px;
-     height: 300px;
-     border: 1px solid #666666a1;
-     background: #ffffff;
-     box-shadow: 0 0 15px #00000086;
-     resize: both;
-     overflow: hidden;
-     border-top-left-radius: 7px;
-     border-top-right-radius: 7px;
-}
-.titlebar {
-     background: #4444446b;
-     padding: 5px;
-     cursor: move;
-     display: flex;
-     justify-content: space-between;
-     align-items: center;
-     height: 20px; /* Явно зададим высоту, чтобы calc работал точнее */
-}
-.titlebar span {
-    margin-left: 5px;
-    color: #333;
-    font-weight: bold;
-}
-.titlebar button {
-     margin-left: 5px;
-     background: none;
-     border: none;
-     color: #333;
-     font-size: 16px;
-     cursor: pointer;
-}
-.titlebar button:hover {
-     color: #000;
-}
-iframe {
-     width: 100%;
-     height: calc(100% - 30px); /* 30px = высота titlebar (20px) + padding (5px*2) */
-     border: none;
-}
-.taskbar {
-     position: absolute;
-     bottom: 0;
-     left: 0;
-     right: 0;
-     height: 40px;
-     background: rgba(20,20,20,0.9);
-     display: flex;
-     align-items: center;
-     padding: 0 10px;
-     border-top-left-radius: 15px;
-     border-top-right-radius: 15px;
-}
-#taskbarClock {
-     color: white;
-     font-size: 14px;
-    margin-left: auto;
-}
-.start-button {
-     background: #2d2d2d00;
-     color: white;
-     border: none;
-     border-radius: 5px;
-     padding: 5px 10px;
-     cursor: pointer;
-     margin-right: 10px;
-     font-size: 20px;
-     line-height: 1;
-}
-.taskbar-apps {
-     display: flex;
-     gap: 5px;
-     flex: 1;
-     justify-content: center;
-}
-.taskbar-apps button { /* Стиль для кнопок-иконок, если они будут кнопками */
-     background: #44444400;
-     border: none;
-     padding: 5px;
-     color: white;
-     cursor: pointer;
-}
-.start-menu {
-     position: absolute;
-     bottom: 50px;
-     left: 10px;
-     width: 260px;
-     max-height: 360px;
-     background: #2c2c2c;
-     border: 1px solid #555;
-     display: none; /* Изначально скрыто */
-     flex-wrap: wrap; /* Чтобы кнопки переносились */
-     padding: 10px;
-     box-shadow: 0 0 10px #000;
-     border-radius: 15px;
-     overflow-y: auto; /* Если приложений много */
-}
-.start-menu button {
-     width: 70px; /* Немного увеличил для лучшего вида */
-     height: 70px; /* Немного увеличил */
-     margin: 5px;
-     background: #55555500;
-     border-radius: 4px;
-     border: none;
-     color: white;
-     font-size: 10px;
-     text-align: center;
-     display: flex;
-     flex-direction: column;
-     justify-content: center;
-     align-items: center;
-     cursor: pointer;
-     padding: 5px; /* Внутренний отступ */
-}
-.start-menu button:hover {
-    background: #ffffff22;
-}
-.start-menu img {
-     width: 32px;  /* Немного увеличил иконку */
-     height: 32px; /* Немного увеличил иконку */
-     margin-bottom: 4px; /* Отступ под иконкой */
-     border-radius: 50%; /* Оставим круглыми */
-}
-.start-menu span {
-    display: block; /* Чтобы текст был под иконкой */
-    word-wrap: break-word; /* Перенос длинных слов */
-    line-height: 1.2;
-}
-.taskbar-icon {
-     position: relative;
-     width: 36px;  /* Уменьшил для компактности */
-     height: 36px; /* Уменьшил для компактности */
-     border-radius: 4px;
-     overflow: hidden;
-     display: flex;
-     align-items: center;
-     justify-content: center;
-     background: #55555533; /* Небольшой фон для видимости */
-     cursor: pointer;
-     margin: 2px; /* Небольшой отступ между иконками */
-}
-.taskbar-icon:hover {
-    background: #55555588;
-}
-.taskbar-icon img {
-     width: 24px;
-     height: 24px;
-     /* border-radius: 50%;  Убрал, т.к. иконки могут быть не круглыми */
-     pointer-events: none;
-}
-.indicator-dot {
-     position: absolute;
-     bottom: 3px; /* Скорректировал положение */
-     width: 6px;
-     height: 6px;
-     border-radius: 50%;
-     background: white;
-     opacity: 0.8;
-}
-.taskbar-icon.minimized .indicator-dot {
-     opacity: 0.4; /* Менее заметная точка для свернутых */
-}
-     </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><?php echo $is_logged_in ? 'Личный кабинет' : 'Список пользователей и вход'; ?></title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="login.css">
 </head>
-<body>
+<body class="bg-blue-50">
+    <div class="container">
+        <?php if ($is_logged_in): ?>
+            <img src="<?php echo $current_avatar; ?>" alt="Аватар пользователя" class="profile-avatar">
+            <h1 class="text-3xl font-bold mb-6 text-green-700">Добро пожаловать, <?php echo $current_username; ?>!</h1>
+            <p class="text-lg text-gray-700 mb-8">Вы успешно авторизованы.</p>
+            <a href="logout.php" class="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-md transition duration-300 ease-in-out transform hover:scale-105">
+                Выйти
+            </a>
+        <?php else: ?>
 
-<div class="taskbar">
-     <button class="start-button" onclick="toggleStartMenu()">☰</button>
-    <div class="taskbar-apps" id="taskbarApps"></div>
-    <div id="taskbarClock"></div>
-</div>
+            <div id="userList" class="mb-8">
+                <?php if (empty($users)): ?>
+                    <p class="text-gray-600">Пользователи не найдены. Добавьте их в базу данных.</p>
+                    <p class="text-sm text-gray-500 mt-2">
+                        Пример добавления пользователя (пароль 'password123', аватар 'user_avatar.png'):<br>
+                        `INSERT INTO users (username, password, avatar) VALUES ('testuser', '<?php echo password_hash('password123', PASSWORD_DEFAULT); ?>', 'user_avatar.png');`<br><br>
+                        Для пользователя без пароля (логин без ввода):<br>
+                        `INSERT INTO users (username, password, avatar) VALUES ('guest', '', 'guest_avatar.png');`
+                    </p>
+                <?php else: ?>
+                    <?php foreach ($users as $user):
+                        // Определяем, нужен ли пароль для этого пользователя
+                        $needs_password = !empty($user['password']);
+                        $display_avatar = !empty($user['avatar']) ? htmlspecialchars($user['avatar']) : 'default_avatar.png'; // Путь к аватарке
+                    ?>
+                        <div class="user-list-item"
+                             data-username="<?php echo htmlspecialchars($user['username']); ?>"
+                             data-needs-password="<?php echo $needs_password ? 'true' : 'false'; ?>">
+                            <img src="<?php echo $display_avatar; ?>" alt="Аватар" class="user-avatar">
+                            <span><?php echo htmlspecialchars($user['username']); ?></span>
+                            <?php if (!$needs_password): ?>
+                                <span class="ml-auto text-sm text-gray-500">(без пароля)</span>
+                            <?php endif; ?>
+                        </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </div>
 
-<div class="start-menu" id="startMenu">
+            <div id="passwordModal" class="modal">
+                <div class="modal-content">
+                    <span class="close-button" id="closeModalBtn">&times;</span>
+                    <h3 class="text-2xl font-semibold mb-4 text-gray-700">Введите пароль для <span id="modalUsername" class="text-blue-600"></span></h3>
+                    <input type="password" id="passwordInput" placeholder="Пароль" class="w-full p-3 mb-4 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400">
+                    <button id="submitPasswordBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-md transition duration-300 ease-in-out transform hover:scale-105">
+                        Войти
+                    </button>
+                    <div id="messageBox" class="message-box mt-4 hidden"></div>
+                </div>
+            </div>
+        <?php endif; ?>
     </div>
 
-<script>
-// Данные о приложениях и ошибка подключения из PHP
-const applicationsFromDB = <?php echo $apps_json; ?>;
-const dbError = <?php echo $db_error_json; ?>;
+    <script>
+        <?php if (!$is_logged_in): ?>
+        const userList = document.getElementById('userList');
+        const passwordModal = document.getElementById('passwordModal');
+        const closeModalBtn = document.getElementById('closeModalBtn');
+        const modalUsernameSpan = document.getElementById('modalUsername');
+        const passwordInput = document.getElementById('passwordInput');
+        const submitPasswordBtn = document.getElementById('submitPasswordBtn');
+        const messageBox = document.getElementById('messageBox');
 
-let z = 1; // z-index manager
-let openWindows = {}; // Объект для отслеживания открытых окон и их иконок
+        let currentUsername = '';
+        let currentNeedsPassword = false; // Добавляем переменную для отслеживания, нужен ли пароль
 
-function createWindow(title, url, iconSrc) {
-     const windowId = 'window_' + Date.now() + Math.random().toString(16).slice(2); // Уникальный ID для окна
+        userList.addEventListener('click', (event) => {
+            const target = event.target.closest('.user-list-item'); // Ищем ближайший родитель с классом user-list-item
+            if (target) {
+                currentUsername = target.dataset.username;
+                currentNeedsPassword = target.dataset.needsPassword === 'true'; // Получаем значение из data-атрибута
 
-     // Если окно с таким URL уже открыто и не свернуто, просто поднимем его и выйдем
-     for (const id in openWindows) {
-        if (openWindows[id].url === url && openWindows[id].win.style.display !== 'none') {
-            openWindows[id].win.style.zIndex = z++;
-            return; // Выходим, чтобы не создавать дубликат
-        }
-     }
-
-     const win = document.createElement('div');
-     win.className = 'window';
-     win.style.top = Math.random() * 50 + 30 + 'px';
-     win.style.left = Math.random() * 150 + 30 + 'px';
-     win.style.zIndex = z++;
-     win.dataset.id = windowId;
-     win.dataset.url = url; // Сохраняем URL для возможной проверки дубликатов
-
-     const titlebar = document.createElement('div');
-     titlebar.className = 'titlebar';
-
-     const titleEl = document.createElement('span');
-     titleEl.innerText = title;
-
-     const btnsDiv = document.createElement('div'); // Контейнер для кнопок
-
-     const minBtn = document.createElement('button');
-     minBtn.innerHTML = '−';
-     minBtn.title = 'Свернуть';
-     minBtn.onclick = (e) => {
-         e.stopPropagation();
-         win.style.display = 'none';
-         if (openWindows[windowId]) {
-             openWindows[windowId].icon.classList.add('minimized');
-         }
-     };
-
-     const extBtn = document.createElement('button');
-     extBtn.innerHTML = '↗';
-     extBtn.title = 'Открыть в новой вкладке';
-     extBtn.onclick = (e) => {
-         e.stopPropagation();
-         window.open(url, '_blank');
-     };
-
-     const closeBtn = document.createElement('button');
-     closeBtn.innerHTML = '×';
-     closeBtn.title = 'Закрыть';
-     closeBtn.onclick = (e) => {
-         e.stopPropagation();
-         win.remove();
-         if (openWindows[windowId]) {
-             openWindows[windowId].icon.remove();
-             delete openWindows[windowId]; // Удаляем из списка открытых окон
-         }
-     };
-
-     btnsDiv.appendChild(minBtn);
-     btnsDiv.appendChild(extBtn);
-     btnsDiv.appendChild(closeBtn);
-
-     titlebar.appendChild(titleEl);
-     titlebar.appendChild(btnsDiv);
-     win.appendChild(titlebar);
-
-     const iframe = document.createElement('iframe');
-     iframe.src = url;
-     win.appendChild(iframe);
-     document.body.appendChild(win);
-
-     win.addEventListener('mousedown', () => {
-         win.style.zIndex = z++;
-     });
-
-     let offsetX, offsetY, dragging = false;
-     titlebar.onmousedown = e => {
-         if (e.target.tagName === 'BUTTON' || e.target.parentElement.tagName === 'BUTTON') return;
-         dragging = true;
-         offsetX = e.clientX - win.offsetLeft;
-         offsetY = e.clientY - win.offsetTop;
-         win.style.zIndex = z++;
-     };
-     document.onmouseup = () => dragging = false;
-     document.onmousemove = e => {
-         if (dragging) {
-             win.style.left = Math.max(0, (e.clientX - offsetX)) + 'px'; // Ограничение по левому краю
-             win.style.top = Math.max(0, (e.clientY - offsetY)) + 'px';   // Ограничение по верхнему краю
-         }
-     };
-
-     // Создаем иконку на панели задач только если ее еще нет для этого URL
-     let appIcon;
-     let existingIcon = null;
-     for (const id in openWindows) {
-        if (openWindows[id].url === url) {
-            existingIcon = openWindows[id].icon;
-            break;
-        }
-     }
-
-     if (existingIcon) {
-        appIcon = existingIcon;
-        // Если окно было свернуто и мы его открываем заново через меню "Пуск"
-        if (win.style.display !== 'none') {
-            appIcon.classList.remove('minimized');
-        }
-     } else {
-         appIcon = document.createElement('div');
-         appIcon.className = 'taskbar-icon';
-         appIcon.title = title;
-
-         const iconImg = document.createElement('img');
-         iconImg.src = iconSrc;
-         iconImg.alt = title;
-         iconImg.onerror = () => {
-            // iconImg.style.display = 'none'; // Скрываем если ошибка
-            // Можно добавить текст вместо иконки
-            const textFallback = document.createElement('span');
-            textFallback.innerText = title.substring(0,1).toUpperCase();
-            textFallback.style.color = 'white';
-            textFallback.style.fontSize = '16px';
-            appIcon.insertBefore(textFallback, iconImg); // Вставляем перед сломанной картинкой
-            iconImg.remove(); // Удаляем сломанную картинку
-         };
-         appIcon.appendChild(iconImg);
-
-         const dot = document.createElement('div');
-         dot.className = 'indicator-dot';
-         appIcon.appendChild(dot);
-
-         document.getElementById('taskbarApps').appendChild(appIcon);
-     }
-
-
-    openWindows[windowId] = { win: win, icon: appIcon, url: url };
-
-    appIcon.onclick = () => {
-        // Найти все окна, связанные с этой иконкой (по URL)
-        let relatedWindowsVisible = false;
-        let topRelatedWindow = null;
-
-        for (const id in openWindows) {
-            if (openWindows[id].icon === appIcon) { // Проверяем, что это та самая иконка
-                const currentWin = openWindows[id].win;
-                if (currentWin.style.display !== 'none') {
-                    relatedWindowsVisible = true;
-                    if (!topRelatedWindow || parseInt(currentWin.style.zIndex) > parseInt(topRelatedWindow.style.zIndex)) {
-                        topRelatedWindow = currentWin;
-                    }
+                if (!currentNeedsPassword) {
+                    // Если пароль не нужен, сразу отправляем AJAX-запрос на авторизацию
+                    // (отправляем пустой пароль, PHP-скрипт поймёт)
+                    authenticateUser(currentUsername, '');
+                } else {
+                    // Если пароль нужен, показываем модальное окно
+                    modalUsernameSpan.textContent = currentUsername;
+                    passwordInput.value = '';
+                    messageBox.classList.add('hidden');
+                    passwordModal.style.display = 'flex';
+                    passwordInput.focus();
                 }
             }
-        }
+        });
 
-        if (relatedWindowsVisible) {
-            // Если есть видимые окна и кликнутое не наверху, поднять его.
-            // Если кликнутое уже наверху, свернуть все окна этого приложения.
-            let allShouldBeMinimized = true;
-            for (const id in openWindows) {
-                if (openWindows[id].icon === appIcon) {
-                    const currentWin = openWindows[id].win;
-                     // Если окно не самое верхнее из этой группы, его не трогаем при решении о минимизации всех
-                    if (currentWin !== topRelatedWindow && currentWin.style.display !== 'none') {
-                         allShouldBeMinimized = false; // Есть другое видимое окно этого приложения
+        closeModalBtn.addEventListener('click', () => {
+            passwordModal.style.display = 'none';
+        });
+
+        submitPasswordBtn.addEventListener('click', () => {
+            const password = passwordInput.value;
+            authenticateUser(currentUsername, password);
+        });
+
+        // Новая функция для отправки AJAX-запроса на аутентификацию
+        async function authenticateUser(username, password) {
+            const formData = new FormData();
+            formData.append('username', username);
+            formData.append('password', password);
+
+            try {
+                const response = await fetch('<?php echo $_SERVER['PHP_SELF']; ?>', {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
                     }
-                }
-            }
+                });
 
-            if (topRelatedWindow && parseInt(topRelatedWindow.style.zIndex) !== z - 1 && topRelatedWindow.style.display !== 'none'){
-                 topRelatedWindow.style.zIndex = z++;
-                 appIcon.classList.remove('minimized'); // Убедимся что иконка не "свернута"
-            } else { // Либо самое верхнее, либо единственное видимое - сворачиваем все
-                 for (const id in openWindows) {
-                    if (openWindows[id].icon === appIcon) {
-                        openWindows[id].win.style.display = 'none';
+                const data = await response.json();
+
+                if (data.success) {
+                    if (data.redirect) {
+                        window.location.href = data.redirect; // Перенаправляем
+                    } else {
+                        displayMessage('Успешный вход! Перенаправление...', 'success');
+                        setTimeout(() => {
+                            window.location.href = 'dash.php';
+                        }, 500);
                     }
+                } else {
+                    displayMessage(data.message, 'error');
                 }
-                appIcon.classList.add('minimized');
-            }
-
-        } else { // Все окна этого приложения свернуты, разворачиваем последнее активное (или первое найденное)
-            let lastActiveWin = null;
-             for (const id in openWindows) {
-                 if (openWindows[id].icon === appIcon) {
-                    lastActiveWin = openWindows[id].win; // Просто берем последнее (или единственное)
-                 }
-             }
-            if(lastActiveWin) {
-                lastActiveWin.style.display = 'block';
-                lastActiveWin.style.zIndex = z++;
-                appIcon.classList.remove('minimized');
+            } catch (error) {
+                console.error('Ошибка при отправке запроса:', error);
+                displayMessage('Произошла ошибка при проверке данных.', 'error');
             }
         }
-    };
-    toggleStartMenu(true); // Закрыть меню "Пуск" после выбора приложения
-}
 
-
-function populateStartMenu() {
-    const menu = document.getElementById('startMenu');
-    menu.innerHTML = ''; // Очищаем предыдущие пункты
-
-    if (dbError) {
-        const errorMsg = document.createElement('div');
-        errorMsg.textContent = 'Ошибка загрузки приложений: ' + dbError;
-        errorMsg.style.color = 'red';
-        errorMsg.style.padding = '10px';
-        menu.appendChild(errorMsg);
-        return;
-    }
-
-    if (applicationsFromDB.length === 0) {
-        const noAppsMsg = document.createElement('div');
-        noAppsMsg.textContent = 'Нет доступных приложений.';
-        noAppsMsg.style.color = 'white';
-        noAppsMsg.style.padding = '10px';
-        noAppsMsg.style.textAlign = 'center';
-        menu.appendChild(noAppsMsg);
-        return;
-    }
-
-    applicationsFromDB.forEach(app => {
-        const button = document.createElement('button');
-        button.onclick = () => createWindow(app.name, app.path, app.icon);
-
-        const img = document.createElement('img');
-        img.src = app.icon;
-        img.alt = app.name;
-        // img.style.borderRadius = '50%'; // Уже есть в CSS для .start-menu img
-
-        const span = document.createElement('span');
-        span.textContent = app.name;
-
-        button.appendChild(img);
-        button.appendChild(span);
-        menu.appendChild(button);
-    });
-}
-
-function toggleStartMenu(forceClose = false) {
-     const menu = document.getElementById('startMenu');
-     if (forceClose) {
-        menu.style.display = 'none';
-        return;
-     }
-     if (menu.style.display === 'flex') {
-         menu.style.display = 'none';
-     } else {
-         populateStartMenu(); // Заполняем меню при каждом открытии
-         menu.style.display = 'flex';
-     }
-}
-
-// Функция для обновления часов
-function updateClock() {
-     const clockElement = document.getElementById('taskbarClock');
-     if (clockElement) {
-         const now = new Date();
-         const hours = now.getHours().toString().padStart(2, '0');
-         const minutes = now.getMinutes().toString().padStart(2, '0');
-         clockElement.innerText = `${hours}:${minutes}`;
-     }
-}
-
-// Обновлять часы каждую секунду и запустить сразу
-setInterval(updateClock, 1000);
-document.addEventListener('DOMContentLoaded', () => {
-    updateClock();
-    if (dbError) {
-        console.error("Ошибка подключения к БД:", dbError);
-        // Можно вывести уведомление пользователю в каком-то месте на странице, если нужно
-        // Например, в taskbar
-        const taskbar = document.getElementById('taskbarApps');
-        const errorDiv = document.createElement('div');
-        errorDiv.textContent = "DB Error!";
-        errorDiv.style.color = "red";
-        errorDiv.style.marginLeft = "10px";
-        errorDiv.title = dbError; // Полная ошибка во всплывающей подсказке
-        // taskbar.parentNode.insertBefore(errorDiv, taskbar.nextSibling); // Вставить после taskbarApps
-    }
-});
-
-// Закрывать меню "Пуск" при клике вне его области
-document.addEventListener('click', function(event) {
-    const startMenu = document.getElementById('startMenu');
-    const startButton = document.querySelector('.start-button');
-    // Проверяем, что клик был не по меню и не по кнопке "Пуск"
-    if (!startMenu.contains(event.target) && !startButton.contains(event.target)) {
-        if (startMenu.style.display === 'flex') {
-            startMenu.style.display = 'none';
+        function displayMessage(message, type) {
+            messageBox.textContent = message;
+            messageBox.className = `message-box mt-4 ${type}`;
+            messageBox.classList.remove('hidden');
         }
-    }
-});
 
-</script>
+        window.addEventListener('click', (event) => {
+            if (event.target === passwordModal) {
+                passwordModal.style.display = 'none';
+            }
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && passwordModal.style.display === 'flex') {
+                passwordModal.style.display = 'none';
+            }
+        });
+        <?php endif; ?>
+    </script>
 </body>
 </html>

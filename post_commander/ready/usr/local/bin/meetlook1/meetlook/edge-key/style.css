@@ -1,0 +1,364 @@
+html, body {
+     margin: 0;
+     padding: 0;
+     height: 100%;
+     overflow: hidden;
+     font-family: sans-serif;
+}
+.window {
+     position: absolute;
+     width: 400px;
+     height: 300px;
+     border: 1px solid #666666a1;
+     background: #ffffff;
+     box-shadow: 0 0 15px #00000086;
+     resize: both;
+     overflow: hidden;
+     border-top-left-radius: 7px;
+     border-top-right-radius: 7px;
+}
+.titlebar {
+     background: #4444446b;
+     padding: 5px;
+     cursor: move;
+     display: flex;
+     justify-content: space-between;
+     align-items: center;
+     height: 20px; /* Явно зададим высоту, чтобы calc работал точнее */
+}
+.titlebar span {
+    margin-left: 5px;
+    color: #333;
+    font-weight: bold;
+}
+.titlebar button {
+     margin-left: 5px;
+     background: none;
+     border: none;
+     color: #333;
+     font-size: 16px;
+     cursor: pointer;
+}
+.titlebar button:hover {
+     color: #000;
+}
+iframe {
+     width: 100%;
+     height: calc(100% - 30px); /* 30px = высота titlebar (20px) + padding (5px*2) */
+     border: none;
+}
+.taskbar {
+     position: absolute;
+     bottom: 0;
+     left: 0;
+     right: 0;
+     height: 40px;
+     background: rgba(20,20,20,0.9);
+     display: flex;
+     align-items: center;
+     padding: 0 10px;
+     border-top-left-radius: 15px;
+     border-top-right-radius: 15px;
+}
+#taskbarClock {
+     color: white;
+     font-size: 14px;
+    margin-left: auto;
+}
+.start-button {
+     background: #2d2d2d00;
+     color: white;
+     border: none;
+     border-radius: 5px;
+     padding: 5px 10px;
+     cursor: pointer;
+     margin-right: 10px;
+     font-size: 20px;
+     line-height: 1;
+}
+.taskbar-apps {
+     display: flex;
+     gap: 5px;
+     flex: 1;
+     justify-content: center;
+}
+.taskbar-apps button { /* Стиль для кнопок-иконок, если они будут кнопками */
+     background: #44444400;
+     border: none;
+     padding: 5px;
+     color: white;
+     cursor: pointer;
+}
+.start-menu {
+     position: absolute;
+     bottom: 50px;
+     left: 10px;
+     width: 260px;
+     max-height: 360px;
+     background: rgba(20,20,20,0.9);
+
+     display: none; /* Изначально скрыто */
+     flex-wrap: wrap; /* Чтобы кнопки переносились */
+     padding: 10px;
+     box-shadow: 0 0 10px #000;
+     border-radius: 15px;
+     overflow-y: auto; /* Если приложений много */
+}
+.start-menu button {
+     width: 70px; /* Немного увеличил для лучшего вида */
+     height: 70px; /* Немного увеличил */
+     margin: 5px;
+     background: #55555500;
+     border-radius: 4px;
+     border: none;
+     color: white;
+     font-size: 10px;
+     text-align: center;
+     display: flex;
+     flex-direction: column;
+     justify-content: center;
+     align-items: center;
+     cursor: pointer;
+     padding: 5px; /* Внутренний отступ */
+}
+.start-menu button:hover {
+    background: #ffffff22;
+}
+.start-menu img {
+     width: 32px;  /* Немного увеличил иконку */
+     height: 32px; /* Немного увеличил иконку */
+     margin-bottom: 4px; /* Отступ под иконкой */
+     border-radius: 50%; /* Оставим круглыми */
+}
+.start-menu span {
+    display: block; /* Чтобы текст был под иконкой */
+    word-wrap: break-word; /* Перенос длинных слов */
+    line-height: 1.2;
+}
+.taskbar-icon {
+     position: relative;
+     width: 36px;  /* Уменьшил для компактности */
+     height: 36px; /* Уменьшил для компактности */
+     border-radius: 4px;
+     overflow: hidden;
+     display: flex;
+     align-items: center;
+     justify-content: center;
+     background: #55555533; /* Небольшой фон для видимости */
+     cursor: pointer;
+     margin: 2px; /* Небольшой отступ между иконками */
+     border-radius: 25px;
+}
+.taskbar-icon:hover {
+    background: #ffffff2d;
+}
+.taskbar-icon img {
+     width: 34px;
+     height: 34px;
+     /* border-radius: 50%;  Убрал, т.к. иконки могут быть не круглыми */
+     pointer-events: none;
+     border-radius: 25px;
+}
+.taskbar-iconx{
+    border-top-left-radius: 10px;
+     width: 19px;
+     height: 19px;
+     /* border-radius: 50%;  Убрал, т.к. иконки могут быть не круглыми */
+     pointer-events: none;
+     border-radius: 25px;
+}
+.deskico{
+     width: 29px;
+     height: 29px;
+}
+.lol {
+   background: #ffffff2d;
+   border-radius: 25px;
+}
+.indicator-dot {
+     position: absolute;
+     bottom: 3px; /* Скорректировал положение */
+     width: 6px;
+     height: 6px;
+     border-radius: 50%;
+     background: white;
+     opacity: 0.8;
+}
+.taskbar-icon.minimized .indicator-dot {
+     opacity: 0.4; /* Менее заметная точка для свернутых */
+}
+
+/* Стили для панели управления */
+.control-panel {
+    position: absolute;
+    bottom: 55px; /* Немного выше панели задач */
+    right: 10px;
+    background-color: rgba(45, 45, 45, 0.95); /* Темный полупрозрачный фон */
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+    display: none; /* Скрыта по умолчанию */
+    flex-direction: column;
+    gap: 15px; /* Отступы между секциями */
+    color: white; /* Цвет текста */
+    width: 250px; /* Ширина панели */
+    z-index: 1000; /* Поверх остальных элементов */
+    font-family: Arial, sans-serif;
+}
+
+.control-panel h3 {
+    text-align: center;
+    color: #00bcd4; /* Цвет заголовка */
+    margin-bottom: 15px;
+    font-size: 1.2em;
+}
+
+.control-panel-section {
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1); /* Разделитель секций */
+}
+
+.control-panel-section:last-child {
+    border-bottom: none; /* Убираем разделитель у последней секции */
+}
+
+.control-panel-button {
+    background-color: #3f51b5; /* Синяя кнопка */
+    color: white;
+    border: none;
+    padding: 10px 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1em;
+    width: 100%;
+    margin-bottom: 10px;
+    transition: background-color 0.2s ease;
+}
+
+.control-panel-button:hover {
+    background-color: #303f9f; /* Темнее при наведении */
+}
+
+.shutdown-button {
+    background-color: #f44336; /* Красная кнопка для выключения */
+}
+
+.shutdown-button:hover {
+    background-color: #d32f2f;
+}
+
+.lock-button {
+    background-color: #ff9800; /* Оранжевая кнопка для блокировки */
+}
+
+.lock-button:hover {
+    background-color: #fb8c00;
+}
+
+.slider {
+    width: 100%;
+    height: 8px;
+    border-radius: 5px;
+    background: #d3d3d3; /* Фон дорожки ползунка */
+    outline: none;
+    opacity: 0.7;
+    -webkit-transition: .2s;
+    transition: opacity .2s;
+}
+
+.slider:hover {
+    opacity: 1;
+}
+
+.slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #00bcd4; /* Цвет ползунка */
+    cursor: pointer;
+}
+
+.slider::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #00bcd4;
+    cursor: pointer;
+}
+
+.control-panel-section h4 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    color: #cddc39; /* Цвет заголовков секций */
+    font-size: 0.9em;
+}
+
+.control-panel-section label {
+    display: block;
+    margin-top: 5px;
+    font-size: 0.9em;
+}
+
+/* Стили для переключателя (темная тема) */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 20px;
+    vertical-align: middle; /* Выравнивание по центру */
+    margin-right: 10px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider.round {
+    border-radius: 20px;
+}
+
+.slider.round:before {
+    border-radius: 50%;
+}
+
+.switch .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    -webkit-transition: .4s;
+    transition: .4s;
+}
+
+.switch .slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    -webkit-transition: .4s;
+    transition: .4s;
+}
+
+.switch input:checked + .slider {
+    background-color: #2196F3;
+}
+
+.switch input:focus + .slider {
+    box-shadow: 0 0 1px #2196F3;
+}
+
+.switch input:checked + .slider:before {
+    -webkit-transform: translateX(20px);
+    -ms-transform: translateX(20px);
+    transform: translateX(20px);
+}
